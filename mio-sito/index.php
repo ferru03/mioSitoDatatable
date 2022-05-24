@@ -5,7 +5,6 @@
     </head>
     <body>
         <?php
-        $method = $_SERVER['REQUEST_METHOD'];
         $servername = '172.17.0.1:3306';
         $username = 'root';
         $password = 'my-secret-pw';
@@ -20,17 +19,32 @@
         header('Content-Type: application/json');
         $page = @$_POST["start"] ?? 0;
         $size = @$_POST["length"] ?? 10;
-        $id = @$_POST["id"];
-        $totPages = 0;
-        $query = "SELECT COUNT(employees.id) AS conteggio FROM employees";
-        $result = mysqli_query($conn, $query);
-        while($row = mysqli_fetch_array($result, MYSQLI_ASSOC)){
-            $totPages = $row["conteggio"];
+        $id = @$_POST["id"] ?? 0;
+        $searchVal = $_POST["search[value]"];
+        $count = countRow();
+        $results = countResults($searchVal);
+        $baseurl = "http://localhost:8090/index.php";
+        
+        $method = $_SERVER['REQUEST_METHOD'];
+
+        function countRow(){
+            $query = "SELECT count(*) FROM employees";
+    
+            $result = $mysqli-> query($query);
+            $row = $result-> fetch_row();
+    
+            return $row[0];
+        }    
+    
+        function countResults($id){
+            $query = "SELECT count(*) FROM employees WHERE id = $id";
+            
+            $result = $mysqli-> query($query);
+            $row = $result-> fetch_row();
+    
+            return $row[0];
         }
-
-        $tot = ceil($totPages / $size);
-        $url = "http://localhost:8090/index.php";
-
+    
         function GET($page, $lenght){
             $query = "SELECT * FROM employees ORDER BY id LIMIT $page, $lenght";
             $rows = array();
@@ -43,15 +57,29 @@
     
             return $rows;
         }
-
-        function POST($first, $last, $gender){
-            $query = "INSERT INTO employees (first_name, last_name, gender) VALUES ('$first', '$last', '$gender')";
+    
+        function GET_FILTERED($searchValue){
+            $query = "SELECT * FROM employees WHERE id = $id";
+    
+            $rows = array();
+    
+            if($result = $mysqli-> query($query)){
+                while($row = $result-> fetch_assoc()){
+                    $rows[] = $row;
+                }
+            }
+    
+            return $rows;
+        }
+    
+        function POST($firstN, $lastN, $g){
+            $query = "INSERT INTO employees (first_name, last_name, gender) VALUES ('$firstN', '$lastN', '$g')";
             $result = $mysqli-> query($query);
     
         }
     
-        function PUT($first, $last, $gender, $id){
-            $query = "UPDATE employees SET first_name = '$first', last_name = '$last', gender = '$gender' WHERE id = $id";
+        function PUT($firstN, $lastN, $g, $id){
+            $query = "UPDATE employees SET first_name = '$firstN', last_name = '$lastN', gender = '$g' WHERE id = $id";
             $result = $mysqli-> query($query);
             
         }
@@ -66,17 +94,18 @@
 
             case 'POST':
 
-                $array['data'] = GET($page * $size, $size);
-                echo json_encode($array);
-
-                if($id != 0){
-                    $array['_embedded']['employees'] = $id;
-                    echo json_encode($array);
+                if(!is_null($searchVal)){
+                    $arrayJSON['data'] = GET_FILTERED($searchVal);
+                    $arrayJSON['recordsFiltered'] = $count;
+                    $arrayJSON['recordsTotal'] = $count;
+                    echo json_encode($arrayJSON);
                 }else{
-                    $array['_embedded']['employees'] = GET($page * $size, $size);
-                    echo json_encode($array);
+                    $arrayJSON['data'] = GET($page*$size, $size);
+                    $arrayJSON['recordsFiltered'] = $count;
+                    $arrayJSON['recordsTotal'] = $count;
+                    echo json_encode($arrayJSON);
                 }
-
+                break;
             case 'PUT':
                 $data = json_decode(file_get_contents('php://input'), true);
                 PUT($data["first_name"], $data["last_name"], $data["gender"], $id);
@@ -87,34 +116,33 @@
             case 'DELETE':
                 DELETE($id);
 
-                echo json_encode($array);
+                echo json_encode($arrayJSON);
                 break;
-                
+            
             default:
                 header("ERROR!! BAD REQUEST");
                 break;
         }
 
-        function href($url, $page, $size, $tot){
-            $last = $url . "?page=" . $page . $tot. "&size=" . $size;
-            return $last;
+        function href($baseurl, $page, $size){
+            return $baseurl . "?page=" . $page . "&size=" . $size;
         }
 
-        function links($page, $size, $last, $url){
-            $link = array(
-                "first" => array ( "href" => href($url, 0, $size)),
-                "self" => array ( "href" => href($url, $page, $size), "templated" => true),
-                "last" => array ( "href" => href($url, $last, $size))
+        function links($page, $size, $last, $baseurl){
+            $links = array(
+                "first" => array ( "href" => href($baseurl, 0, $size)),
+                "self" => array ( "href" => href($baseurl, $page, $size), "templated" => true),
+                "last" => array ( "href" => href($baseurl, $last, $size))
             );
             
             if($page > 0){
-                $link["prev"] = array( "href" => href($url, $page - 1, $size));
+                $links["prev"] = array( "href" => href($baseurl, $page - 1, $size));
             }
             
             if($page < $last){
-                $link["next"] = array ( "href" => href($url, $page + 1, $size));
-            }  
-            return $link;
+                $links["next"] = array ( "href" => href($baseurl, $page + 1, $size));
+            }
+            return $links;
         }
         ?>
     </body>

@@ -1,149 +1,79 @@
-<!DOCTYPE html>
-<html>
-    <head>
-        <title>Ajax e datatable</title>
-    </head>
-    <body>
-        <?php
-        $servername = '172.17.0.1:3306';
-        $username = 'root';
-        $password = 'my-secret-pw';
-        $dbname = "mydb";
+<?php
+    include "./pages/dataLayer.php";
+    header('Access-Control-Allow-Origin: *');
+    header('Access-Control-Allow-Methods: GET, POST, PATCH, PUT, DELETE, OPTIONS');
+    header('Access-Control-Allow-Headers: Origin, Content-Type, X-Auth-Token');
+    
+    header('Content-Type: application/json');
 
-        $conn = mysqli_connect($servername, $username, $password, $dbname);
-        if (!$conn)
-        {
-            die("Could not connect MySql Server");
-        }
+    $method = $_SERVER['REQUEST_METHOD']; 
 
-        header('Content-Type: application/json');
-        $page = @$_POST["start"] ?? 0;
-        $size = @$_POST["length"] ?? 10;
-        $id = @$_POST["id"] ?? 0;
-        $searchVal = $_POST["search[value]"];
-        $count = countRow();
-        $results = countResults($searchVal);
-        $baseurl = "http://localhost:8090/index.php";
+    $start = @$_POST["start"] ?? 0;
+    $length = @$_POST["length"] ?? 10;
+
+    $totalElements = get_totalElements();
+    $totPages = get_totPages($totalElements, $length);
+
+    $url = "http://localhost:8080/employees/index.php";
+    
+    $response = array(
+        "data" => array(),
+        "recordsTotal" => intval($totalElements)
+    );
+    
+    switch($method){
+        case 'GET':
+        case 'POST': 
+            $response["data"] = get($start, $length);
+            $response["recordsFiltered"] = intval(filteredCount());
+            echo json_encode($response, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+            break;
+
+        default:
+            header("HTTP/1.1 400 BAD REQUEST");
+            break;
+    }
+
+    function get_totalElements()
+    {
+        require ("./pages/database.php");
         
-        $method = $_SERVER['REQUEST_METHOD'];
+        $query = "SELECT count(*) FROM employees";
 
-        function countRow(){
-            $query = "SELECT count(*) FROM employees";
-    
-            $result = $mysqli-> query($query);
-            $row = $result-> fetch_row();
-    
-            return $row[0];
-        }    
-    
-        function countResults($id){
-            $query = "SELECT count(*) FROM employees WHERE id = $id";
-            
-            $result = $mysqli-> query($query);
-            $row = $result-> fetch_row();
-    
-            return $row[0];
-        }
-    
-        function GET($page, $lenght){
-            $query = "SELECT * FROM employees ORDER BY id LIMIT $page, $lenght";
-            $rows = array();
-    
-            if($result = $mysqli-> query($query)){
-                while($row = $result-> fetch_assoc()){
-                    $rows[] = $row;
-                }
-            }
-    
-            return $rows;
-        }
-    
-        function GET_FILTERED($searchValue){
-            $query = "SELECT * FROM employees WHERE id = $id";
-    
-            $rows = array();
-    
-            if($result = $mysqli-> query($query)){
-                while($row = $result-> fetch_assoc()){
-                    $rows[] = $row;
-                }
-            }
-    
-            return $rows;
-        }
-    
-        function POST($firstN, $lastN, $g){
-            $query = "INSERT INTO employees (first_name, last_name, gender) VALUES ('$firstN', '$lastN', '$g')";
-            $result = $mysqli-> query($query);
-    
-        }
-    
-        function PUT($firstN, $lastN, $g, $id){
-            $query = "UPDATE employees SET first_name = '$firstN', last_name = '$lastN', gender = '$g' WHERE id = $id";
-            $result = $mysqli-> query($query);
-            
-        }
-    
-        function DELETE($id){
-            $query = "DELETE FROM employees WHERE id = $id";
-            $result = $mysqli-> query($query);
-            
-        }
+        $result = $mysqli-> query($query);
+        $totE = $result-> fetch_row();
 
-        switch($method){
+        return $totE[0];
+    }
 
-            case 'POST':
+    function get_totPages($totalElements, $lenght)
+    {
+        require ("./pages/database.php");
 
-                if(!is_null($searchVal)){
-                    $arrayJSON['data'] = GET_FILTERED($searchVal);
-                    $arrayJSON['recordsFiltered'] = $count;
-                    $arrayJSON['recordsTotal'] = $count;
-                    echo json_encode($arrayJSON);
-                }else{
-                    $arrayJSON['data'] = GET($page*$size, $size);
-                    $arrayJSON['recordsFiltered'] = $count;
-                    $arrayJSON['recordsTotal'] = $count;
-                    echo json_encode($arrayJSON);
-                }
-                break;
-            case 'PUT':
-                $data = json_decode(file_get_contents('php://input'), true);
-                PUT($data["first_name"], $data["last_name"], $data["gender"], $id);
+        $totP = ceil($totalElements/$lenght) -1;
+        return $totP;
+    }
 
-                echo json_encode($data);
-                break;
+    function href($url, $page, $lenght){
+        return $url . "?page=" . $page . "&size=" . $lenght;
+    }
 
-            case 'DELETE':
-                DELETE($id);
-
-                echo json_encode($arrayJSON);
-                break;
-            
-            default:
-                header("ERROR!! BAD REQUEST");
-                break;
+    function set_link($page, $lenght, $totPages, $url)
+    {
+        $links = array(
+            "first" => array ( "href" => href($url, 0, $lenght)),
+            "self" => array ( "href" => href($url, $page, $lenght), "templated" => true),
+            "last" => array ( "href" => href($url, $totPages, $lenght))
+        );
+        
+        if($page > 0){
+            $links["prev"] = array( "href" => href($url, $page - 1, $lenght));
         }
-
-        function href($baseurl, $page, $size){
-            return $baseurl . "?page=" . $page . "&size=" . $size;
+        
+        if($page < $totPages){
+            $links["next"] = array ( "href" => href($url, $page + 1, $lenght));
         }
-
-        function links($page, $size, $last, $baseurl){
-            $links = array(
-                "first" => array ( "href" => href($baseurl, 0, $size)),
-                "self" => array ( "href" => href($baseurl, $page, $size), "templated" => true),
-                "last" => array ( "href" => href($baseurl, $last, $size))
-            );
-            
-            if($page > 0){
-                $links["prev"] = array( "href" => href($baseurl, $page - 1, $size));
-            }
-            
-            if($page < $last){
-                $links["next"] = array ( "href" => href($baseurl, $page + 1, $size));
-            }
-            return $links;
-        }
-        ?>
-    </body>
-</html>
+        
+        return $links;
+    }
+?>

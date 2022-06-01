@@ -6,7 +6,7 @@ Windows: Scaricare Docker Desktop per Windows. Avviare il file.exe scaricato e s
 
 Dopo la corretta installazione Docker funziona. Per avviare il Back-End consiglio di utilizzare il prompt dei comandi.
 
-ABisogna avviare Apache e Mysql tramite Docker.
+Bisogna avviare Apache e Mysql tramite Docker.
 
 Mysql:
 
